@@ -1,7 +1,7 @@
 module dsymbol.utils;
 import dparse.lexer : tok, IdType, Token;
 
-enum TYPE_IDENT_CASES = q{
+enum TYPE_IDENT_CASES_IDENTIFIER_EXCLUDED = q{
 	case tok!"int":
 	case tok!"uint":
 	case tok!"long":
@@ -27,6 +27,10 @@ enum TYPE_IDENT_CASES = q{
 	case tok!"creal":
 	case tok!"this":
 	case tok!"super":
+};
+
+enum TYPE_IDENT_CASES = q{
+	mixin(TYPE_IDENT_CASES_IDENTIFIER_EXCLUDED);
 	case tok!"identifier":
 };
 
@@ -37,6 +41,7 @@ enum STRING_LITERAL_CASES = q{
 };
 
 enum TYPE_IDENT_AND_LITERAL_CASES = TYPE_IDENT_CASES ~ STRING_LITERAL_CASES;
+enum TYPE_IDENT_AND_LITERAL_CASES_IDENTIFIER_EXCLUDED = TYPE_IDENT_CASES_IDENTIFIER_EXCLUDED ~ STRING_LITERAL_CASES;
 
 /**
  * Skips blocks of parentheses until the starting block has been closed
@@ -139,6 +144,51 @@ do
 	}
 }
 
+/**
+ * Traverses a token slice in reverse to find identifier then a bang
+ */
+size_t goBackToBang(T)(T beforeTokens)
+in
+{
+	assert (beforeTokens.length > 0);
+}
+do
+{
+	size_t i = beforeTokens.length - 1;
+	while (true) switch (beforeTokens[i].type)
+	{
+	case tok!",":
+	case tok!".":
+	case tok!"*":
+	case tok!"&":
+	case tok!"doubleLiteral":
+	case tok!"floatLiteral":
+	case tok!"idoubleLiteral":
+	case tok!"ifloatLiteral":
+	case tok!"intLiteral":
+	case tok!"longLiteral":
+	case tok!"realLiteral":
+	case tok!"irealLiteral":
+	case tok!"uintLiteral":
+	case tok!"ulongLiteral":
+	case tok!"characterLiteral":
+	case tok!"(":
+	case tok!"[":
+	case tok!")":
+	case tok!"}":
+	case tok!"]":
+	mixin(TYPE_IDENT_AND_LITERAL_CASES);
+		if (i == 0)
+			return size_t.max;
+		else
+			i--;
+		break;
+	case tok!"identifier":
+		return i + 1;
+	default:
+		return size_t.max;
+	}
+}
 ///Testing skipping
 unittest
 {
@@ -152,6 +202,14 @@ unittest
 	i = t.length - 1;
 	i = skipParenReverseBefore(t, i, tok!")", tok!"(");
 	assert(i == 1);
+}
+
+unittest {
+	Token[] beforeTokens = [
+		Token(tok!"identifier"), Token(tok!"!"), Token(tok!"identifier"), Token(tok!"(")
+	];
+	size_t i = beforeTokens.goBackToBang;
+	assert(i == 2);
 }
 
 T getExpression(T)(T beforeTokens)

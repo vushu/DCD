@@ -586,3 +586,11 @@ package bool isTemplateBangParen(T)(T beforeTokens) pure {
 		&& beforeTokens[$ - 2] == tok!"!"
 		&& beforeTokens[$ - 1] == tok!"(";
 }
+
+// Check if we are doing "Something!string" calltip hint
+bool isTemplateBangSingleIdentifier(T)(T beforeTokens) pure {
+	return beforeTokens.length >= 3
+		&& beforeTokens[$ - 3] == tok!"identifier"
+		&& beforeTokens[$ - 2] == tok!"!"
+		&& beforeTokens[$ - 1] == tok!"identifier";
+}

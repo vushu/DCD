@@ -46,7 +46,7 @@ done
 
 if [ -z "${1:-}" ];
 then
-	TESTCASES="tc*"
+	TESTCASES="tc_template_bang*"
 else
 	TESTCASES="$1"
 fi

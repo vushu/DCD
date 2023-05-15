@@ -319,7 +319,7 @@ AutocompleteResponse calltipCompletion(T)(T beforeTokens,
 		ScopeSymbolPair pair = generateAutocompleteTrees(tokenArray, &rba, cursorPosition, moduleCache);
 		scope(exit) pair.destroy();
 		// We remove by 2 when the calltip hint is !( else remove by 1.
-		auto endOffset = beforeTokens.isTemplateBangParen ? 2 : 1;
+		auto endOffset = (beforeTokens.isTemplateBangParen || beforeTokens.isTemplateBangSingleIdentifier) ? 2 : 1;
 		auto expression = getExpression(beforeTokens[0 .. $ - endOffset]);
 		response.setCompletions(pair.scope_, expression,
 			cursorPosition, CompletionType.calltips, calltipHint);
@@ -338,8 +338,7 @@ AutocompleteResponse calltipCompletion(T)(T beforeTokens,
 IdType getSignificantTokenId(T)(T beforeTokens)
 {
 	auto significantTokenId = beforeTokens[$ - 2].type;
-	if (beforeTokens.isTemplateBangParen)
-	{
+	if (beforeTokens.isTemplateBangParen || beforeTokens.isTemplateBangSingleIdentifier) {
 		return beforeTokens[$ - 3].type;
 	}
 	return significantTokenId;
@@ -379,8 +378,8 @@ CalltipHint getCalltipHint(T)(T beforeTokens, out size_t parenIndex)
 	{
 		return CalltipHint.indexOperator;
 	}
-	else if (beforeTokens.isTemplateBang || beforeTokens.isTemplateBangParen)
-	{
+
+	if(beforeTokens.isTemplateBang || beforeTokens.isTemplateBangParen){
 		return CalltipHint.templateArguments;
 	}
 	else if (beforeTokens.isOpenParen || beforeTokens.isOpenSquareBracket)

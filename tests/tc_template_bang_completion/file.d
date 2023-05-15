@@ -41,3 +41,15 @@ void shouldNotComplete1() {
 void shouldNotComplete2() {
 	Something!!(
 }
+
+void partlyInstatiated1() {
+	Wrapper!string
+}
+
+void partlyInstatiated2() {
+	Something!(string, int)(
+}
+
+void partlyInstatiated3() {
+	doSomething!string(
+}

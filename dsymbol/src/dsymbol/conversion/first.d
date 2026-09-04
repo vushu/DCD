@@ -32,6 +32,7 @@ import dsymbol.semantic;
 import dsymbol.string_interning;
 import dsymbol.symbol;
 import dsymbol.type_lookup;
+import dsymbol.mixin_eval;
 import std.algorithm.iteration : map;
 import std.array : appender;
 import std.experimental.allocator;
@@ -758,6 +759,31 @@ final class FirstPass : ASTVisitor
 		}
 	}
 
+
+
+	private void injectMixinDeclarations(string generated, size_t mixinOffset)
+	{
+		mixinDepth++;                    // new private uint member
+		scope (exit) mixinDepth--;
+		if (mixinDepth > 8)              // recursion cap for nested mixins
+			return;
+		foreach (decl; parseGeneratedDeclarations(generated, mixinOffset))
+			visit(decl);                 // ← this line is why it must be a method
+	}
+
+	override void visit(const MixinDeclaration md) {
+		if (md.mixinExpression is null) {
+			return; 
+		}
+
+		// we try to evaluate the mixin string if possible
+		auto generated = evaluateMixinString(md.mixinExpression, currentScope, cache);
+		if (generated is null) {
+			return;
+		}
+		injectMixinDeclarations(generated, md.tokens[0].index);
+	}
+
 	override void visit(const ForeachStatement feStatement)
 	{
 		if (feStatement.declarationOrStatement !is null
@@ -1339,6 +1365,8 @@ private:
 	ModuleCache* cache;
 
 	bool skipBaseClassesOfNewAnon;
+
+	uint mixinDepth;
 
 	ubyte foreachTypeIndexOfInterest;
 	ubyte foreachTypeIndex;

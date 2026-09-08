@@ -26,6 +26,7 @@ import dsymbol.cache_entry;
 import dsymbol.conversion.first;
 import dsymbol.conversion.second;
 import dsymbol.conversion.third;
+import dsymbol.mixin_eval : MixinExpansion;
 import dsymbol.modulecache;
 import dsymbol.scope_;
 import dsymbol.semantic;
@@ -47,6 +48,12 @@ ScopeSymbolPair generateAutocompleteTrees(const(Token)[] tokens,
 		parseAllocator, cursorPosition);
 
 	scope first = new FirstPass(m, internString("stdin"), &cache);
+	// String mixins the built-in evaluator cannot expand are resolved by
+	// the external compiler-based resolver, if the server installed one.
+	// The in-memory document's text is reconstructed from its tokens.
+	if (cache.mixinResolver !is null)
+		first.setMixinExpansions(cache.mixinResolver(
+			sourceTextOf(tokens)));
 	first.run();
 
 	secondPass(first.rootSymbol, first.moduleScope, cache);
@@ -96,6 +103,54 @@ Module parseModuleSimple(const(Token)[] tokens, string fileName, RollbackAllocat
 }
 
 private:
+
+/**
+ * Reconstructs the source text of a document from its tokens, for the
+ * external mixin resolver (which feeds the text to the D compiler and
+ * matches expansions by line number).
+ *
+ * Two invariants matter, both verified against dparse's token model:
+ * $(UL
+ *     $(LI Keyword and operator tokens have a $(D null) `text`; their
+ *         spelling comes from `str(t.type)` instead.)
+ *     $(LI Line numbers must be preserved: the compiler's dump anchors
+ *         expansions by line, and FirstPass matches them against
+ *         `token.line` of the original document. Each token is emitted
+ *         at its own absolute line, and newlines inside multi-line
+ *         tokens (e.g. `q{...}`) are accounted for.)
+ * )
+ * Whitespace within a line is not preserved (a single space separates
+ * tokens), which is fine: D is whitespace-insensitive and only line
+ * numbers are matched.
+ */
+string sourceTextOf(const(Token)[] tokens)
+{
+	import std.array : appender;
+
+	auto buf = appender!string;
+	size_t currentLine = 1;
+	foreach (ref t; tokens)
+	{
+		if (t.type == tok!"__EOF__" || t.type == tok!"")
+			continue;
+		// Emit the token on its own absolute line.
+		if (t.line > currentLine)
+		{
+			foreach (_; currentLine .. t.line)
+				buf.put('\n');
+			currentLine = t.line;
+		}
+		immutable text = t.text !is null ? t.text : str(t.type);
+		buf.put(text);
+		// Multi-line tokens (token strings, block comments) advance the
+		// line counter by their embedded newlines.
+		foreach (c; text)
+			if (c == '\n')
+				currentLine++;
+		buf.put(' ');
+	}
+	return buf.data;
+}
 
 Module parseModuleForAutocomplete(const(Token)[] tokens, string fileName,
 	RollbackAllocator* parseAllocator, size_t cursorPosition)

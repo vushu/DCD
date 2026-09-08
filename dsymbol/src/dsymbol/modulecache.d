@@ -26,6 +26,7 @@ import dsymbol.conversion;
 import dsymbol.conversion.first;
 import dsymbol.conversion.second;
 import dsymbol.cache_entry;
+import dsymbol.mixin_eval : MixinExpansion;
 import dsymbol.scope_;
 import dsymbol.semantic;
 import dsymbol.symbol;
@@ -169,10 +170,12 @@ struct ModuleCache
 
 		const(Token)[] tokens;
 		auto parseStringCache = StringCache(fileSize.optimalBucketCount);
+		string sourceText;
 		{
 			ubyte[] source = cast(ubyte[]) Mallocator.instance.allocate(fileSize);
 			scope (exit) Mallocator.instance.deallocate(source);
 			f.rawRead(source);
+			sourceText = cast(string) source.dup;
 			LexerConfig config;
 			config.fileName = cachedLocation;
 
@@ -191,12 +194,14 @@ struct ModuleCache
 		Module m = parseModuleSimple(tokens[], cachedLocation, &parseAllocator);
 
 		scope first = new FirstPass(m, cachedLocation, &this, newEntry);
+		// String mixins the built-in evaluator cannot expand (format!,
+		// static foreach, ...) are resolved by the external compiler-based
+		// resolver, if the server installed one.
+		if (mixinResolver !is null)
+			first.setMixinExpansions(mixinResolver(sourceText));
 		first.run();
 
 		secondPass(first.rootSymbol, first.moduleScope, this);
-
-		typeid(Scope).destroy(first.moduleScope);
-		symbolsAllocated += first.symbolsAllocated;
 
 		SysTime access;
 		SysTime modification;
@@ -345,6 +350,19 @@ struct ModuleCache
 
 	/// Count of autocomplete symbols that have been allocated
 	uint symbolsAllocated;
+
+	/**
+	 * Optional external string-mixin resolver (the D compiler's mixin
+	 * dump). When set, `cacheModule` and `generateAutocompleteTrees`
+	 * consult it for mixins that the built-in evaluator cannot handle
+	 * (format!-based generators, static foreach, __traits, ...).
+	 *
+	 * The delegate receives the file's source text and returns the
+	 * expansions anchored in that file. It lives in the server layer
+	 * (process spawning is not a dsymbol concern); dsymbol only defines
+	 * the data shape (MixinExpansion) to avoid an import cycle.
+	 */
+	MixinExpansion[] delegate(string source) mixinResolver;
 
 private:
 

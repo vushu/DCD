@@ -1,21 +1,3 @@
-/**
- * This file is part of DCD, a development tool for the D programming language.
- * Copyright (C) 2014 Brian Schott
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
 module dcd.server.main;
 
 import core.sys.posix.sys.stat;
@@ -44,6 +26,7 @@ import dcd.common.dcd_version;
 import dcd.common.messages;
 import dcd.common.socket;
 import dsymbol.modulecache;
+import dcd.server.mixin_resolver : MixinExpansionResolver;
 import dcd.server.autocomplete;
 import dcd.server.server;
 
@@ -202,6 +185,13 @@ int runServer(string[] args)
 
 	ModuleCache cache;
 	cache.addImportPaths(importPaths);
+	// Compiler-backed string-mixin resolution: the D compiler's mixin
+	// dump expands mixins that DCD's built-in evaluator cannot (format!,
+	// static foreach, __traits, ...). Optional — a missing compiler
+	// just leaves the built-in evaluator as the only source.
+	auto mixinResolver = new MixinExpansionResolver(
+		cache.getImportPaths().array);
+	cache.mixinResolver = &mixinResolver.resolve;
 	infof("Import directories:\n    %-(%s\n    %)", cache.getImportPaths());
 
 	ubyte[] buffer = cast(ubyte[]) Mallocator.instance.allocate(1024 * 1024 * 4); // 4 megabytes should be enough for anybody...

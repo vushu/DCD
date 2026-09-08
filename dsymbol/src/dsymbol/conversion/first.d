@@ -33,7 +33,8 @@ import dsymbol.semantic;
 import dsymbol.string_interning;
 import dsymbol.symbol;
 import dsymbol.type_lookup;
-import dsymbol.mixin_eval;
+import dsymbol.mixin_eval : MixinEvaluator, MixinExpansion,
+	parseGeneratedDeclarations;
 import std.algorithm.iteration : map;
 import std.array : appender;
 import std.experimental.allocator;
@@ -824,10 +825,31 @@ final class FirstPass : ASTVisitor
 
 		// we try to evaluate the mixin string if possible
 		auto generated = mixinEvaluator.evaluate(md.mixinExpression, currentScope);
-		if (generated is null) {
+		if (generated is null)
+		{
+			// Fallback: the external compiler-based resolver may have an
+			// expansion for this line (mixins the limited evaluator cannot
+			// handle: format!, static foreach, __traits, ...).
+			generated = expansionForLine(md.tokens[0].line);
+		}
+		if (generated is null)
+		{
 			return;
 		}
 		injectMixinDeclarations(generated, md.tokens[0].index);
+	}
+
+	/**
+	 * Looks up a compiler-provided mixin expansion by the 1-based line of
+	 * the mixin declaration. Same-line collisions (two mixins on one
+	 * line) are rare; the first match wins.
+	 */
+	private string expansionForLine(size_t line)
+	{
+		foreach (ref expansion; mixinExpansions)
+			if (expansion.line == line)
+				return expansion.text;
+		return null;
 	}
 
 	/**
@@ -1526,6 +1548,26 @@ private:
 	/// this pass).
 	MixinEvaluator mixinEvaluator;
 
+	/// String-mixin expansions produced by the external compiler-based
+	/// resolver (see ModuleCache.mixinResolver), anchored at the line of
+	/// the mixin declaration. Consulted when the built-in evaluator
+	/// cannot expand the mixin.
+	MixinExpansion[] mixinExpansions;
+
+public:
+
+	/**
+	 * Installs pre-computed string-mixin expansions (from the D
+	 * compiler's mixin dump) as a fallback source for mixins the
+	 * built-in evaluator cannot expand. Must be called before run().
+	 */
+	void setMixinExpansions(MixinExpansion[] expansions)
+	{
+		this.mixinExpansions = expansions;
+	}
+
+private:
+
 	ubyte foreachTypeIndexOfInterest;
 	ubyte foreachTypeIndex;
 }
@@ -1639,8 +1681,6 @@ private istring formatConstraint(const Constraint constraint)
 	formatNode(app, constraint.expression);
 	return internString(app.data);
 }
-
-private:
 
 bool isDitto(scope const(char)[] comment)
 {

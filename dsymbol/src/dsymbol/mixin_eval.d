@@ -35,6 +35,19 @@ import dsymbol.string_interning;
 import std.string : empty;
 
 /**
+ * One string-mixin expansion produced by an external resolver (the D
+ * compiler's mixin dump), anchored at the line of the `mixin(` token in
+ * the source file.
+ */
+struct MixinExpansion
+{
+	/// 1-based line of the `mixin` declaration in the source file
+	size_t line;
+	/// the fully evaluated mixin text
+	string text;
+}
+
+/**
  * A string-valued eponymous template, in one of two forms:
  *
  * $(UL

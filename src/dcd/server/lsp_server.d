@@ -13,6 +13,7 @@ import dcd.server.lsp.document;
 import dcd.server.lsp.handlers;
 
 import dsymbol.modulecache;
+import dcd.server.mixin_resolver : MixinExpansionResolver;
 
 /**
  * The lifecycle state of the LSP server.
@@ -51,6 +52,15 @@ int runLspServer(string[] importPaths, bool ignoreConfig)
 		import dcd.server.server : loadConfiguredImportDirs;
 		cache.addImportPaths(loadConfiguredImportDirs());
 	}
+
+	// Compiler-backed string-mixin resolution (same as the socket
+	// server): the D compiler's mixin dump expands mixins that DCD's
+	// built-in evaluator cannot. The resolver discovers the compiler
+	// lazily; a missing compiler just leaves the built-in evaluator as
+	// the only source.
+	auto mixinResolver = new MixinExpansionResolver(
+		cache.getImportPaths().array);
+	cache.mixinResolver = &mixinResolver.resolve;
 
 	ServerContext context;
 	context.cache = &cache;
